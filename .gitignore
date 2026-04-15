@@ -1,0 +1,16 @@
+# Abhängigkeiten
+node_modules/
+
+# Build-Artefakte
+dist/
+
+# Lokale Umgebungsvariablen (nie einchecken!)
+.env
+.env.production
+
+# Coverage-Reports
+coverage/
+
+# Editor
+.vscode/
+.DS_Store
