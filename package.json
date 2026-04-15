@@ -1,0 +1,23 @@
+{
+  "name": "ci_cd_web_test",
+  "version": "1.0.0",
+  "description": "CI/CD Lernprojekt",
+  "scripts": {
+    "lint:js": "eslint app.js",
+    "lint:html": "htmlhint index.html",
+    "lint": "npm run lint:js && npm run lint:html",
+    "start": "npx http-server . -p 3000 -o"
+  },
+  "keywords": [
+    "cicd",
+    "learning"
+  ],
+  "author": "Dein Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.0",
+    "globals": "^17.5.0",
+    "htmlhint": "^1.9.2"
+  }
+}

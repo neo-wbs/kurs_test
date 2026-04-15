@@ -1,109 +1,208 @@
-# CI/CD Praxis-Anleitung — Teil 2
+# CI/CD Praxis-Anleitung — Teil 3
 
-> **Ziel:** Git initialisieren, mit GitHub verbinden und einen
-> vollständigen Git-Workflow einrichten
+> **Ziel:** CI-Pipeline ein, die bei jedem Push automatisch Linting 
+> und Tests ausführt — und kannst erst in `main` mergen,
+> wenn alles grün ist.
 >
-> **Voraussetzungen:** GitHub-Account ✓ | VS Code ✓ | Projektstruktur ✓
+> **Voraussetzungen:** Node.js installiert | Teil 2 absolviert
 
 ---
-## Schritt 1 — GitHub Repository erstellen
 
-1. Gehe zu **github.com** und logge dich ein
-2. Klicke auf **"New repository"** (grüner Button oder `+` oben rechts)
-3. Einstellungen:
-   - **Repository name:** `dein_repo`
-   - **Visibility:** Public *(für kostenlose GitHub Actions)*
-   - **Initialize with README:** optional anhaken
-   - **.gitignore:** `Node` auswählen
-4. Klicke **"Create repository"**
-
-## Schritt 2 — Git installieren & konfigurieren
-
-Öffne ein Terminal (VS Code: `Strg + ö` oder `Terminal > New Terminal`), auf Gitbash umschalten:
+## Schritt 1 — Node.js prüfen & Projekt initialisieren
 
 ```bash
-git --version # Prüfen ob Git bereits installiert ist
-cd pfad/zu/deinem/lokalen/ordner
-
-# Variante 1 Github Repository ist nicht leer
-git clone https://github.com/dein_name/dein_repo.git
-
-# Variante 2 Github Repository ist leer
-git init -b main
-git remote add origin https://github.com/dein_name/dein_repo.git
-git remote -v # Schauen ob es mit remote-Repo verbunden ist
-git status # Überprüfe
-
-git config user.name "Dein Name" 
-git config user.email "Dein_Name@email.com"
-git config --list (Abbruch mit q)
-
-touch .gitignore # Datei anlegen, falls .gitignore nicht von GitHub generiert (Inhalt vgl. lokale .gitignore)
+node --version   # mind. v18
+npm --version    # mind. v9
 ```
 
-## Schritt 3 — Mit Branches arbeiten (GitHub Flow)
+Falls nicht installiert: https://nodejs.org (LTS-Version wählen)
 
 ```bash
-# Neuen Feature-Branch erstellen
-git checkout -b feature/add-footer
+# In dein Projektverzeichnis wechseln
+cd dein/ordner
 
-# Prüfen auf welchem Branch du bist
-git branch
-# * feature/add-footer
-#   main
+# package.json anlegen (falls noch nicht vorhanden, -y überspringt alle Fragen)
+npm init -y
+# package.json anpassen (vgl. Code), danach:
+npm install
 ```
 
-Füge einen Footer zu `index.html` und `style.css` hinzu (vgl. Code):
+---
+
+## Schritt 2 — Linting-Tools installieren
 
 ```bash
-# Änderungen committen
+# ESLint für JavaScript
+npm install --save-dev eslint
+
+# HTMLHint für HTML
+npm install --save-dev htmlhint
+
+# ESLint initialisieren
+npx eslint --init
+```
+
+Bei `npx eslint --init` folgende Antworten wählen:
+- What do you want to lint? → **Javascript**
+- How would you like to use ESLint? → **To check syntax and find problems**
+- What type of modules? → **CommonJS**
+- Which framework? → **None of these**
+- Does your project use TypeScript? → **No**
+- Where does your code run? → **Browser**
+- Package Manager? → **npm**
+
+### Er legt .eslintrc.json oder eslint.config.mjs an
+
+.eslintrc.json so anpassen:
+
+```json
+{
+  "env": {
+    "browser": true,
+    "commonjs": true,
+    "es2021": true
+  },
+  "extends": "eslint:recommended",
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-console": "off",
+    "semi": ["error", "always"],
+    "quotes": ["error", "single"]
+  }
+}
+```
+
+eslint.config.mjs so anpassen:
+
+```js
+import js from "@eslint/js";
+import globals from "globals";
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  { files: ["**/*.{js,mjs,cjs}"], plugins: { js }, extends: ["js/recommended"], languageOptions: { globals: globals.browser } },
+  { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
+]);
+```
+
+### .htmlhintrc anlegen
+
+Neue Datei `.htmlhintrc` im Projektroot:
+
+```json
+{
+  "tagname-lowercase": true,
+  "attr-lowercase": true,
+  "attr-value-double-quotes": true,
+  "doctype-first": true,
+  "tag-pair": true,
+  "id-unique": true,
+  "src-not-empty": true,
+  "title-require": true
+}
+```
+
+### npm-Scripts aktualisieren
+
+`package.json` Scripts-Bereich ersetzen:
+
+```json
+{
+  "scripts": {
+    "lint:js": "eslint app.js",
+    "lint:html": "htmlhint index.html",
+    "lint": "npm run lint:js && npm run lint:html",
+    "start": "npx http-server . -p 3000 -o"
+  }
+}
+```
+
+Linting testen:
+
+```bash
+npm run lint
+# Erwartete Ausgabe: Fehler
+# error  'validateEmail' is defined but never used  no-unused-vars
+# error  'formatVersion' is defined but never used  no-unused-vars
+
+# Korrektur: Genannte Funktionen verwenden für Modul export, sonst nicht testbar
+// Für Tests exportieren (Node.js-Umgebung)
+if (typeof module !== 'undefined') {
+    module.exports = { getRandomMessage, validateEmail, formatVersion, messages };
+}
+
+# Erwartete Ausgabe: Scanned 1 files, no errors found
+```
+
+## Schritt 3 — GitHub Actions Workflow anlegen
+
+Erstelle folgende Verzeichnisstruktur:
+
+```bash
+mkdir -p .github/workflows
+```
+
+Neue Datei: `.github/workflows/ci.yml` (Evtl. GitHub Actions for VS Code Extension installieren)
+
+```yaml
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Code auschecken
+        uses: actions/checkout@v4
+
+      - name: 🟢 Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Abhängigkeiten installieren
+        run: npm ci
+
+      - name: 🔍 JavaScript Linting (ESLint)
+        run: npm run lint:js
+
+      - name: 🔍 HTML Linting (HTMLHint)
+        run: npm run lint:html
+
+```
+
+> **Hinweis `npm ci` vs `npm install`:** `npm ci` ist für CI-Umgebungen optimiert.
+> Es installiert exakt die Versionen aus `package-lock.json` und ist schneller
+> und deterministisch. Immer `npm ci` in Pipelines verwenden!
+
+---
+
+## Schritt 4 — Alles committen und Pipeline beobachten
+
+```bash
+# Alle neuen Dateien hinzufügen
 git add .
-git commit -m "feat: add footer"
-# Feature-Branch zu GitHub pushen
-git push origin feature/add-footer
+
+# Commit erstellen
+git commit -m "feat: add CI pipeline with linting and Jest tests"
+
+# Pushen
+git push origin main
 ```
 
+### Pipeline beobachten
+
+1. Gehe zu `github.com/USERNAME/dein_repo`
+2. Klicke auf den Tab **"Actions"**
+3. Du siehst den laufenden Workflow "CI Pipeline"
+4. Klicke drauf → dann auf "Lint & Test" → siehst jeden Step live
+5. Nach ~1-2 Minuten: Grüner Haken
 ---
-## Schritt 4 — Pull Request erstellen
-
-1. Gehe zu **github.com/USERNAME/dein_repo**
-2. Du siehst einen Banner: **"feature/add-footer had recent pushes"**
-3. Klicke **"Compare & pull request"**
-4. Fülle das PR-Formular aus:
-   - **Titel:** `feat: add footer with deployment info`
-   - **Beschreibung:**
-     ```
-     ## Was wurde gemacht?
-     Footer zur Startseite hinzugefügt.
-
-     ## Warum?
-     Zeigt Deployment-Informationen an.
-
-     ## Wie testen?
-     index.html im Browser öffnen - Footer sollte sichtbar sein.
-     ```
-5. Klicke **"Create pull request"**
-
----
-
-## Schritt 4 — Pull Request mergen
-
-1. Klicke auf **"Merge pull request"**
-2. Klicke **"Confirm merge"**
-3. Klicke **"Delete branch"** (aufräumen)
-
-Lokal synchronisieren:
-
-```bash
-# Zurück auf main wechseln
-git checkout main
-
-# Neueste Änderungen herunterladen (inkl. des Merges)
-git pull origin main
-
-# Lokalen Feature-Branch löschen
-git branch -d feature/add-footer
-
-# Kontrolle
-git status
-```

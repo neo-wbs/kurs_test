@@ -49,3 +49,8 @@ if (typeof document !== 'undefined') {
         updateStatus();
     });
 }
+
+// Für Tests exportieren (Node.js-Umgebung)
+if (typeof module !== 'undefined') {
+    module.exports = { getRandomMessage, validateEmail, formatVersion, messages };
+}
