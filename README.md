@@ -142,14 +142,17 @@ const APP_NAME = 'kurs_test';
 ```
 
 `npm test` liefert aber wieder Fehler: SyntaxError: Cannot use 'import.meta' outside a module
-Bedeutet, Jest (unser Test-Framework) kann nicht mit 'import.meta' umgehen, beide Modularten
+Bedeutet, Jest (unser Test-Framework) kann, wie erwähnt, nicht mit 'import.meta' umgehen, beide Modularten
 haben wir getestet. Deshalb nehmen wir für die Tests CommonJS, also die `app.cjs` und für den Build
-ESM, also die `app.js`, um die Umgebungsvariablen zu nutzen.
+ESM, also die `app.js`, um die Umgebungsvariablen zu nutzen. Aber nicht vergessen: 
+Beim Linting `app.cjs` mit aufnehmen in `package.json`: `"lint:js": "eslint app.js app.cjs"` 
+und in `eslint.config.mjs` Module unterschiedlich checken (vgl. Code).
 
 ```javascript
 # in app.test.js
 const { getRandomMessage, validateEmail, formatVersion, messages } = require('./app.cjs');
 npm test
+npm run lint
 npm run dev
 ```
 
