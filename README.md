@@ -241,11 +241,15 @@ git tag -a v1.1.0 -m "Release 1.1.0 - hat einen Bug"
 git push origin v1.1.0
 ```
 
-### Rollback-Option: Git Revert (empfohlen)
+### Rollback-Option: Git Revert (empfohlen) - Noch verbessern !!!
 
 ```bash
 # Letzten Merge-Commit rückgängig machen
-git revert HEAD
+# Commit-Id herausfinden
+git log --oneline
+git reset 8578803 # Commit und alles danach rückgängig machen: git reset 8578803 --hard
+# Geht auch git revert 8578803, Unterschied: revert erzeugt 
+# neuen Commit für zurückgenommene Änderungen, reset nicht
 git commit -m "revert: rollback v1.1.0 due to bug"
 git push origin main
 
