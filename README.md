@@ -137,7 +137,7 @@ CommonJS unterstützt aber kein 'import.meta'. Das ist erst mit ECMAScript modul
 Nennen wir die Datei mal um in `app.cjs` und implementieren die `app.js` mal als ES Module (ESM). Inhalt vgl. Code.
 
 ```javascript
-# in app.cjs das 'import.meta' erstmal wieder raus:
+// in app.cjs das 'import.meta' erstmal wieder raus:
 const APP_NAME = 'kurs_test';
 ```
 
@@ -149,8 +149,9 @@ Beim Linting `app.cjs` mit aufnehmen in `package.json`: `"lint:js": "eslint app.
 und in `eslint.config.mjs` Module unterschiedlich checken (vgl. Code).
 
 ```javascript
-# in app.test.js
+// in app.test.js
 const { getRandomMessage, validateEmail, formatVersion, messages } = require('./app.cjs');
+// Testen
 npm test
 npm run lint
 npm run dev
@@ -161,7 +162,7 @@ Nachteil unserer Variante ist, dass ich `app.js` und `app.cjs` immer synchron ha
 
 ---
 
-## Schritt 4 — CI-Pipeline um Build-Job erweitern
+## Schritt 4 — CI-Pipeline um Build-Job erweitern und Tags als Trigger
 
 Ergänze bzw. ändere `.github/workflows/ci.yml` (vgl. Code):
 
@@ -215,5 +216,77 @@ Push v1.0.0 Tag
 - **Pipeline:** `github.com/USERNAME/dein_repo/actions`
 - **Live-Seite:** `https://USERNAME.github.io/dein_repo/`
 - **Release:** `github.com/USERNAME/dein_repo/releases`
+
+---
+
+## Schritt 6 — Rollback simulieren
+
+### Szenario: v1.1.0 hat einen Bug
+
+```bash
+# Simuliere eine neue Version mit Bug
+git checkout -b feature/new-version
+
+# Füge eine neue aber "kaputte" Änderung in index.html ein
+# (z.B. den Titel ändern)
+# Dann committen und pushen
+git add .
+git commit -m "feat: new version with bug"
+git push origin feature/new-version
+
+# PR erstellen und mergen
+# Nach Merge: Tag erstellen
+git checkout main && git pull
+git tag -a v1.1.0 -m "Release 1.1.0 - hat einen Bug"
+git push origin v1.1.0
+```
+
+### Rollback-Option: Git Revert (empfohlen)
+
+```bash
+# Letzten Merge-Commit rückgängig machen
+git revert HEAD
+git commit -m "revert: rollback v1.1.0 due to bug"
+git push origin main
+
+# Neuen Fix-Tag erstellen
+git tag -a v1.1.1 -m "Hotfix: rollback to stable state"
+git push origin v1.1.1
+
+# Eventuell Tags löschen, später (jetzt nicht)
+git tag -d v1.1.0 (lokal)
+git push origin --delete v1.1.0 (remote)
+```
+
+## Schritt 7 — Deployment-Umgebung mit Approval (optional)
+
+```bash
+# In GitHub: Settings → Environments → New environment
+# Name: "production"
+# Required reviewers: Dich selbst hinzufügen (Benutzername oben rechts bei Github)
+```
+
+Neuen Job am Ende der `ci.yml` hinzufügen:
+
+```yaml
+  deploy-production:
+    name: Deploy to Production (with Approval)
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production    # <- Wartet auf manuellen Approval
+
+    steps:
+      - run: echo "Production deployment approved and running!"
+      # Hier echte Deployment-Steps einfügen
+```
+
+Jetzt pausiert die Pipeline beim `deploy-production`-Job und wartet auf
+deinen manuellen Klick im GitHub Actions-Interface. Wenn ich selbst Reviewer bin, läuft Job durch ohne Überprüfung. 
+Geht nur, wenn ich Tag pushe bei Trigger = Tag (vgl. in `ci.yml`: `startsWith(github.ref, 'refs/tags/v')`)
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ---
