@@ -104,3 +104,92 @@ git push origin main
 7. Klicke **"Save changes"**
 
 ---
+
+## Schritt 7 — Fehlschlagende Pipeline absichtlich testen
+
+Testen, ob Pipeline wirklich schützt:
+
+```bash
+# Neuen Branch erstellen
+git checkout -b test/broken-code
+# Füge in `app.js` einen absichtlichen Syntaxfehler ein
+git add .
+git commit -m "test: intentionally broken code"
+git push origin test/broken-code
+# Pipeline ESLint schlägt fehl
+
+# Die letzte Änderung rückgängig machen
+git revert HEAD
+git push origin test/broken-code
+# PR aktualisiert sich → Pipeline wird wieder grün
+```
+
+## Schritt 8 — Deploy-Job hinzufügen (GitHub Pages)
+
+Erweitere `.github/workflows/ci.yml` um einen Deploy-Job:
+
+```yaml
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: lint-and-test          # Nur wenn CI grün!
+    if: github.ref == 'refs/heads/main'   # Nur auf main-Branch
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Auf GitHub Pages deployen
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          exclude_assets: '.github,node_modules,*.test.js,*.md,package*.json,.eslintrc.json,.htmlhintrc'
+```
+
+Alles committen und pushen
+
+```bash
+# Alle neuen Dateien hinzufügen
+git add .
+# Commit erstellen
+git commit -m "feat: add deployment"
+# Pushen
+git push origin main
+```
+
+GitHub Pages aktivieren:
+1. **Settings → Pages**
+2. **Source:** Deploy from a branch
+3. **Branch:** `main` → Save (gh-pages)
+
+Nach dem nächsten Push: Deine Seite ist live unter  
+`https://USERNAME.github.io/dein_repo`
+
+---
+
+## Zusammenfassung: Was die Pipeline jetzt macht
+
+```
+Push/PR auf main
+      │
+      ▼
+Job: lint-and-test
+  ✓ Checkout Code
+  ✓ Node.js 20 setup
+  ✓ npm ci
+  ✓ ESLint (JavaScript)
+  ✓ HTMLHint (HTML)
+  ✓ Jest Tests
+  ✓ Coverage-Report speichern
+      │ (nur wenn grün + nur auf main)
+      ▼
+Job: deploy
+  ✓ Deploy zu GitHub Pages
+      │
+      ▼
+   Live unter github.io/...
+```
