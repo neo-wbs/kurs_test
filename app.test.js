@@ -1,4 +1,4 @@
-const { getRandomMessage, validateEmail, formatVersion, messages } = require('./app');
+const { getRandomMessage, validateEmail, formatVersion, messages } = require('./app.cjs');
 
 // ── Unit-Tests: getRandomMessage ──────────────────────────────────────────
 describe('getRandomMessage()', () => {

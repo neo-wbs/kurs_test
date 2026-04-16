@@ -1,195 +1,216 @@
-# CI/CD Praxis-Anleitung — Teil 4
+# CI/CD Praxis-Anleitung — Teil 5
 
-> **Ziel:** Tests erstellen. CI-Pipeline ändern, die bei jedem Push neben Linting 
-> auch Tests ausführt — und kannst erst in `main` mergen,
-> wenn alles grün ist.
+> **Ziel:** Du erweiterst das Projekt um einen echten Build-Prozess mit Vite,
+> versionierst Releases mit Git-Tags und baust eine vollautomatische
+> Deploy-Pipeline, die bei jedem Tag-Push live geht.
 >
-> **Voraussetzungen:** Teil 3 absolviert
+> **Voraussetzungen:** Teil 4 absolviert
 
 ---
-## Schritt 1 — Jest einrichten und erste Tests schreiben
+
+## Schritt 1 — Vite als Build-Tool einrichten
 
 ```bash
-npm install --save-dev jest
+# In dein Projektverzeichnis wechseln
+cd dein_projekt
+
+# Vite installieren (als Dev-Dependency)
+npm install --save-dev vite
+
+# esbuild installieren
+npm install esbuild
 ```
 
-### app.js für Tests vorbereiten
+### vite.config.js anlegen
 
-Die Funktionen in `app.js` müssen exportiert werden, damit Jest sie testen kann.
-Hatten wir gemacht im letzten Teil.
+Neue Datei `vite.config.js` im Projektroot erstellen (Inhalt vgl. Code). 
+Repo-Name anpassen nicht vergessen.
 
-### Testdatei erstellen: app.test.js
-
-vgl. Code in `app.test.js`
-
-### npm-Scripts aktualisieren
-
-`package.json` Scripts-Bereich ergänzen:
+### package.json Scripts aktualisieren
 
 ```json
 {
   "scripts": {
-    "lint:js": "eslint app.js",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint:js": "eslint app.js app.cjs",
     "lint:html": "htmlhint index.html",
     "lint": "npm run lint:js && npm run lint:html",
     "test": "jest",
-    "test:coverage": "jest --coverage",
-    "start": "npx http-server . -p 3000 -o"
+    "test:ci": "jest --ci --coverage --coverageReporters=text --coverageReporters=lcov",
+    "clean": "rm -rf dist"
   }
 }
 ```
 
-Tests lokal ausführen:
+## Schritt 2 — Umgebungsvariablen einrichten
+
+### .env anlegen (für alle Umgebungen)
 
 ```bash
+VITE_APP_NAME=dein_projekt
+VITE_APP_VERSION=1.0.0
+```
+
+### .env.production anlegen
+
+```bash
+VITE_APP_ENV=production
+VITE_BUILD_DATE=auto
+```
+
+### .gitignore ergänzen
+
+Öffne `.gitignore` und stelle sicher, dass .env + .env.production + dist/ vorhanden sind
+
+---
+
+## Schritt 3 — Build lokal testen - Problem 1 = Modul lösen
+
+```bash
+# Erster Build meldet Fehler: <script src="app.js"> in "/index.html" can't be bundled without type="module" attribute
+# Zudem wird nur minified css generiert in dist/
+npm run build
+
+# vite verlangt in index.html: 
+<script src="app.js" type="module"></script>
+
+# Nach Ergänzen, geht html direkt im Browser öffnen nicht mehr
+# In FF Entwicklertools viele Fehler, v.a.: (Grund: CORS-Anfrage war nicht http)
+npm run preview # css, js nicht funktionabel
+npm run dev # css geht, js meldet Fehler: Uncaught ReferenceError: updateStatus is not defined
+
+# Grund: Ohne type="module" > Lädt als normales Script.
+# Es landen alle Variablen/Funktionen landen im globalen Scope (`window.updateStatus` verfügbar)
+# Mit type="module" > Lädt als ES Module
+# Code läuft in einem eigenen Scope – nichts landet auf globalen Scope (`window.updateStatus` wird von html nicht gefunden)
+
+# Lösung: Event Listener im Modul registrieren:
+<button id="status-btn">Status aktualisieren</button>
+document.getElementById('status-btn').addEventListener('click', updateStatus);
+```
+
+```bash
+# Produktion-Build erstellen
+npm run build
+
+# Was wurde erzeugt?
+ls -la dist/
+# dist/
+# ├── index.html        (optimiert)
+# ├── assets/
+# │   ├── index-abc123.js   (gehasht, minifiziert)
+# │   └── index-def456.css  (gehasht, minifiziert)
+```
+
+```bash
+# Build lokal vorschauen (simuliert Produktion) > (einfach html im Browser öffnen, geht nicht mehr)
+npm run dev 
+# Öffnet http://localhost:5173/dein_projekt/
+```
+
+Die Seite sollte identisch zur Development-Version aussehen — aber die Dateien
+sind jetzt minifiziert und für Produktion optimiert.
+
+---
+
+## Schritt 4: Umgebungsvariable in app.js nutzen - Problem 2 = import.meta nur in Modul
+
+Wenn ich Umgebungsvariablen in app.js nutzen will, läuft `npm run dev` sauber:
+
+```javascript
+const APP_NAME = import.meta.env?.VITE_APP_NAME ?? 'kurs_test';
+
+const messages = [
+    `${APP_NAME}: Pipeline läuft!`,
+    'Tests bestanden!',
+    'Deploy bereit!',
+    'CI/CD läuft!',
+    'Code ist sauber!'
+];
+```
+
+`npm test` liefert aber Fehler: SyntaxError: Cannot use 'import.meta' outside a module
+`app.js` ist momentan ein CommonJS (CJS) - Modul, weil Jest nur damit umgehen kann. 
+CommonJS unterstützt aber kein 'import.meta'. Das ist erst mit ECMAScript modules eingeführt worden. 
+Nennen wir die Datei mal um in `app.cjs` und implementieren die `app.js` mal als ES Module (ESM). Inhalt vgl. Code.
+
+```javascript
+# in app.cjs das 'import.meta' erstmal wieder raus:
+const APP_NAME = 'kurs_test';
+```
+
+`npm test` liefert aber wieder Fehler: SyntaxError: Cannot use 'import.meta' outside a module
+Bedeutet, Jest (unser Test-Framework) kann nicht mit 'import.meta' umgehen, beide Modularten
+haben wir getestet. Deshalb nehmen wir für die Tests CommonJS, also die `app.cjs` und für den Build
+ESM, also die `app.js`, um die Umgebungsvariablen zu nutzen.
+
+```javascript
+# in app.test.js
+const { getRandomMessage, validateEmail, formatVersion, messages } = require('./app.cjs');
 npm test
-# Erwartete Ausgabe: 
-# Test Suites: 1 passed, 1 total
-# Tests:       8 passed, 8 total
-
-npm run test:coverage
-# Zeigt Coverage-Tabelle — app.js sollte >70% haben
+npm run dev
 ```
 
-## Schritt 4 — GitHub Actions Workflow ergänzen
+Läuft jetzt, Alternative zu unserer Variante wäre Babel: https://dev.to/rolamuibi/jest-and-vite-cannot-use-importmeta-outside-a-module-24n3. 
+Nachteil unserer Variante ist, dass ich `app.js` und `app.cjs` immer synchron halten muss. Vorteil: keine zusätzlichen Abhängigkeiten.
 
-```yaml
-name: CI Pipeline
-...
-jobs:
-  lint-and-test:
-    ...
-      - name: 🧪 Tests ausführen
-        run: npm test
+---
 
-      - name: 📊 Coverage-Bericht hochladen
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 7
-```
+## Schritt 4 — CI-Pipeline um Build-Job erweitern
 
-## Schritt 5 — Alles committen und Pipeline beobachten
+Ergänze bzw. ändere `.github/workflows/ci.yml` (vgl. Code):
+
+## Schritt 5 — Erstes Release mit Git-Tag
+
+Jetzt versionieren wir das Projekt und lösen das erste echte Release aus:
 
 ```bash
-# Alle neuen Dateien hinzufügen
+# Alle aktuellen Änderungen committen
 git add .
-# Commit erstellen
-git commit -m "feat: add CI pipeline with linting and Jest tests"
-# Pushen
+git commit -m "feat: add Vite build pipeline and deploy workflow"
 git push origin main
+
+# Ersten Release-Tag erstellen
+git tag -a v1.0.0 -m "Release 1.0.0: CI/CD Pipeline komplett eingerichtet"
+
+# Tag zu GitHub pushen (löst den release-Job aus)
+git push origin v1.0.0
 ```
 
-### Pipeline beobachten
-
-1. Gehe zu `github.com/USERNAME/ci_cd_web_test`
-2. Klicke auf den Tab **"Actions"**
-3. Du siehst den laufenden Workflow "CI Pipeline"
-4. Klicke drauf → dann auf "Lint & Test" → siehst jeden Step live
-5. Nach ~1-2 Minuten: Grüner Haken
-
----
-
-## Schritt 6 — Branch Protection einrichten
-
-1. Gehe zu **Settings → Branches**
-2. Klicke **"Add branch ruleset"**
-3. **Ruleset Name:** `main_rule`
-4. Target branches > Include by pattern > `main`
-4. Aktiviere: **"Require status checks to pass before merging"**
-5. Suche und wähle: `Lint & Test` als Required Check
-6. Aktiviere: **"Require a pull request before merging"** *(empfohlen)*
-7. Klicke **"Save changes"**
-
----
-
-## Schritt 7 — Fehlschlagende Pipeline absichtlich testen
-
-Testen, ob Pipeline wirklich schützt:
-
-```bash
-# Neuen Branch erstellen
-git checkout -b test/broken-code
-# Füge in `app.js` einen absichtlichen Syntaxfehler ein
-git add .
-git commit -m "test: intentionally broken code"
-git push origin test/broken-code
-# Pipeline ESLint schlägt fehl
-
-# Die letzte Änderung rückgängig machen
-git revert HEAD
-git push origin test/broken-code
-# PR aktualisiert sich → Pipeline wird wieder grün
-```
-
-## Schritt 8 — Deploy-Job hinzufügen (GitHub Pages)
-
-Erweitere `.github/workflows/ci.yml` um einen Deploy-Job:
-
-```yaml
-  deploy:
-    name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
-    needs: lint-and-test          # Nur wenn CI grün!
-    if: github.ref == 'refs/heads/main'   # Nur auf main-Branch
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Code auschecken
-        uses: actions/checkout@v4
-
-      - name: Auf GitHub Pages deployen
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./
-          exclude_assets: '.github,node_modules,*.test.js,*.md,package*.json,.eslintrc.json,.htmlhintrc'
-```
-
-GitHub Pages aktivieren:
-1. **Settings → Pages**
-2. **Source:** Deploy from a branch
-3. **Branch:** `main` → Save (gh-pages)
-
-Alles committen und pushen
-
-```bash
-# Alle neuen Dateien hinzufügen
-git add .
-# Commit erstellen
-git commit -m "feat: add deployment"
-# Pushen
-git push origin main
-```
-
-Nach dem nächsten Push: Deine Seite ist live unter  
-`https://USERNAME.github.io/dein_repo`
-
----
-
-## Zusammenfassung: Was die Pipeline jetzt macht
+### Was jetzt passiert (in GitHub Actions beobachten):
 
 ```
-Push/PR auf main
+Push v1.0.0 Tag
       │
       ▼
-Job: lint-and-test
-  ✓ Checkout Code
-  ✓ Node.js 20 setup
-  ✓ npm ci
-  ✓ ESLint (JavaScript)
-  ✓ HTMLHint (HTML)
-  ✓ Jest Tests
-  ✓ Coverage-Report speichern
-      │ (nur wenn grün + nur auf main)
-      ▼
-Job: deploy
-  ✓ Deploy zu GitHub Pages
+┌─────────────────────┐
+│  lint-and-test      │  ~1 Min
+│  ✓ Lint             │
+│  ✓ Tests            │
+└─────────────────────┘
       │
       ▼
-   Live unter github.io/...
+┌─────────────────────┐
+│  build              │  ~30 Sek
+│  ✓ npm run build    │
+│  ✓ dist/ gespeichert│
+└─────────────────────┘
+      │
+      ├──────────────────────────────┐
+      ▼                              ▼
+┌─────────────────┐    ┌─────────────────────┐
+│  deploy         │    │  release            │
+│  ✓ GitHub Pages │    │  ✓ ZIP erstellen    │
+└─────────────────┘    │  ✓ GitHub Release   │
+                       └─────────────────────┘
 ```
+
+### Ergebnis prüfen:
+
+- **Pipeline:** `github.com/USERNAME/dein_repo/actions`
+- **Live-Seite:** `https://USERNAME.github.io/dein_repo/`
+- **Release:** `github.com/USERNAME/dein_repo/releases`
+
+---
