@@ -150,6 +150,11 @@ Erweitere `.github/workflows/ci.yml` um einen Deploy-Job:
           exclude_assets: '.github,node_modules,*.test.js,*.md,package*.json,.eslintrc.json,.htmlhintrc'
 ```
 
+GitHub Pages aktivieren:
+1. **Settings → Pages**
+2. **Source:** Deploy from a branch
+3. **Branch:** `main` → Save (gh-pages)
+
 Alles committen und pushen
 
 ```bash
@@ -160,11 +165,6 @@ git commit -m "feat: add deployment"
 # Pushen
 git push origin main
 ```
-
-GitHub Pages aktivieren:
-1. **Settings → Pages**
-2. **Source:** Deploy from a branch
-3. **Branch:** `main` → Save (gh-pages)
 
 Nach dem nächsten Push: Deine Seite ist live unter  
 `https://USERNAME.github.io/dein_repo`
