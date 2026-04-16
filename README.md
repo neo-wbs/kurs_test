@@ -1,110 +1,30 @@
-# CI/CD Praxis-Anleitung — Teil 3
+# CI/CD Praxis-Anleitung — Teil 4
 
-> **Ziel:** CI-Pipeline ein, die bei jedem Push automatisch Linting 
-> und Tests ausführt — und kannst erst in `main` mergen,
+> **Ziel:** Tests erstellen. CI-Pipeline ändern, die bei jedem Push neben Linting 
+> auch Tests ausführt — und kannst erst in `main` mergen,
 > wenn alles grün ist.
 >
-> **Voraussetzungen:** Node.js installiert | Teil 2 absolviert
+> **Voraussetzungen:** Teil 3 absolviert
 
 ---
-
-## Schritt 1 — Node.js prüfen & Projekt initialisieren
-
-```bash
-node --version   # mind. v18
-npm --version    # mind. v9
-```
-
-Falls nicht installiert: https://nodejs.org (LTS-Version wählen)
+## Schritt 1 — Jest einrichten und erste Tests schreiben
 
 ```bash
-# In dein Projektverzeichnis wechseln
-cd dein/ordner
-
-# package.json anlegen (falls noch nicht vorhanden, -y überspringt alle Fragen)
-npm init -y
-# package.json anpassen (vgl. Code), danach:
-npm install
+npm install --save-dev jest
 ```
 
----
+### app.js für Tests vorbereiten
 
-## Schritt 2 — Linting-Tools installieren
+Die Funktionen in `app.js` müssen exportiert werden, damit Jest sie testen kann.
+Hatten wir gemacht im letzten Teil.
 
-```bash
-# ESLint für JavaScript
-npm install --save-dev eslint
+### Testdatei erstellen: app.test.js
 
-# HTMLHint für HTML
-npm install --save-dev htmlhint
-
-# ESLint initialisieren
-npx eslint --init
-```
-
-Bei `npx eslint --init` folgende Antworten wählen:
-- What do you want to lint? → **Javascript**
-- How would you like to use ESLint? → **To check syntax and find problems**
-- What type of modules? → **CommonJS**
-- Which framework? → **None of these**
-- Does your project use TypeScript? → **No**
-- Where does your code run? → **Browser**
-- Package Manager? → **npm**
-
-### Er legt .eslintrc.json oder eslint.config.mjs an
-
-.eslintrc.json so anpassen:
-
-```json
-{
-  "env": {
-    "browser": true,
-    "commonjs": true,
-    "es2021": true
-  },
-  "extends": "eslint:recommended",
-  "rules": {
-    "no-unused-vars": "warn",
-    "no-console": "off",
-    "semi": ["error", "always"],
-    "quotes": ["error", "single"]
-  }
-}
-```
-
-eslint.config.mjs so anpassen:
-
-```js
-import js from "@eslint/js";
-import globals from "globals";
-import { defineConfig } from "eslint/config";
-
-export default defineConfig([
-  { files: ["**/*.{js,mjs,cjs}"], plugins: { js }, extends: ["js/recommended"], languageOptions: { globals: globals.browser } },
-  { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
-]);
-```
-
-### .htmlhintrc anlegen
-
-Neue Datei `.htmlhintrc` im Projektroot:
-
-```json
-{
-  "tagname-lowercase": true,
-  "attr-lowercase": true,
-  "attr-value-double-quotes": true,
-  "doctype-first": true,
-  "tag-pair": true,
-  "id-unique": true,
-  "src-not-empty": true,
-  "title-require": true
-}
-```
+vgl. Code in `app.test.js`
 
 ### npm-Scripts aktualisieren
 
-`package.json` Scripts-Bereich ersetzen:
+`package.json` Scripts-Bereich ergänzen:
 
 ```json
 {
@@ -112,97 +32,75 @@ Neue Datei `.htmlhintrc` im Projektroot:
     "lint:js": "eslint app.js",
     "lint:html": "htmlhint index.html",
     "lint": "npm run lint:js && npm run lint:html",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "start": "npx http-server . -p 3000 -o"
   }
 }
 ```
 
-Linting testen:
+Tests lokal ausführen:
 
 ```bash
-npm run lint
-# Erwartete Ausgabe: Fehler
-# error  'validateEmail' is defined but never used  no-unused-vars
-# error  'formatVersion' is defined but never used  no-unused-vars
+npm test
+# Erwartete Ausgabe: 
+# Test Suites: 1 passed, 1 total
+# Tests:       8 passed, 8 total
 
-# Korrektur: Genannte Funktionen verwenden für Modul export, sonst nicht testbar
-// Für Tests exportieren (Node.js-Umgebung)
-if (typeof module !== 'undefined') {
-    module.exports = { getRandomMessage, validateEmail, formatVersion, messages };
-}
-
-# Erwartete Ausgabe: Scanned 1 files, no errors found
+npm run test:coverage
+# Zeigt Coverage-Tabelle — app.js sollte >70% haben
 ```
 
-## Schritt 3 — GitHub Actions Workflow anlegen
-
-Erstelle folgende Verzeichnisstruktur:
-
-```bash
-mkdir -p .github/workflows
-```
-
-Neue Datei: `.github/workflows/ci.yml` (Evtl. GitHub Actions for VS Code Extension installieren)
+## Schritt 4 — GitHub Actions Workflow ergänzen
 
 ```yaml
 name: CI Pipeline
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
+...
 jobs:
   lint-and-test:
-    name: Lint & Test
-    runs-on: ubuntu-latest
+    ...
+      - name: 🧪 Tests ausführen
+        run: npm test
 
-    steps:
-      - name: 📥 Code auschecken
-        uses: actions/checkout@v4
-
-      - name: 🟢 Node.js einrichten
-        uses: actions/setup-node@v4
+      - name: 📊 Coverage-Bericht hochladen
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: 📦 Abhängigkeiten installieren
-        run: npm ci
-
-      - name: 🔍 JavaScript Linting (ESLint)
-        run: npm run lint:js
-
-      - name: 🔍 HTML Linting (HTMLHint)
-        run: npm run lint:html
-
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
 ```
 
-> **Hinweis `npm ci` vs `npm install`:** `npm ci` ist für CI-Umgebungen optimiert.
-> Es installiert exakt die Versionen aus `package-lock.json` und ist schneller
-> und deterministisch. Immer `npm ci` in Pipelines verwenden!
-
----
-
-## Schritt 4 — Alles committen und Pipeline beobachten
+## Schritt 5 — Alles committen und Pipeline beobachten
 
 ```bash
 # Alle neuen Dateien hinzufügen
 git add .
-
 # Commit erstellen
 git commit -m "feat: add CI pipeline with linting and Jest tests"
-
 # Pushen
 git push origin main
 ```
 
 ### Pipeline beobachten
 
-1. Gehe zu `github.com/USERNAME/dein_repo`
+1. Gehe zu `github.com/USERNAME/ci_cd_web_test`
 2. Klicke auf den Tab **"Actions"**
 3. Du siehst den laufenden Workflow "CI Pipeline"
 4. Klicke drauf → dann auf "Lint & Test" → siehst jeden Step live
 5. Nach ~1-2 Minuten: Grüner Haken
+
+---
+
+## Schritt 6 — Branch Protection einrichten
+
+1. Gehe zu **Settings → Branches**
+2. Klicke **"Add branch ruleset"**
+3. **Ruleset Name:** `main_rule`
+4. Target branches > Include by pattern > `main`
+4. Aktiviere: **"Require status checks to pass before merging"**
+5. Suche und wähle: `Lint & Test` als Required Check
+6. Aktiviere: **"Require a pull request before merging"** *(empfohlen)*
+7. Klicke **"Save changes"**
+
 ---

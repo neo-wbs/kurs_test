@@ -12,20 +12,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Code auschecken
+      - name: Code auschecken
         uses: actions/checkout@v4
 
-      - name: 🟢 Node.js einrichten
+      - name: Node.js einrichten
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: 📦 Abhängigkeiten installieren
+      - name: Abhängigkeiten installieren
         run: npm ci
 
-      - name: 🔍 JavaScript Linting (ESLint)
+      - name: JavaScript Linting (ESLint)
         run: npm run lint:js
 
-      - name: 🔍 HTML Linting (HTMLHint)
+      - name: HTML Linting (HTMLHint)
         run: npm run lint:html
+
+      - name: 🧪 Tests ausführen
+        run: npm test
+
+      - name: 📊 Coverage-Bericht hochladen
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
