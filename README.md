@@ -221,45 +221,72 @@ Push v1.0.0 Tag
 
 ## Schritt 6 — Rollback simulieren
 
-### Szenario: v1.1.0 hat einen Bug
+### PHASE 1: Buggy Version vorbereiten
 
 ```bash
-# Simuliere eine neue Version mit Bug
 git checkout -b feature/new-version
-
-# Füge eine neue aber "kaputte" Änderung in index.html ein
-# (z.B. den Titel ändern)
-# Dann committen und pushen
+# index.html ändern (Titel etc.), dann:
 git add .
 git commit -m "feat: new version with bug"
 git push origin feature/new-version
 
-# PR erstellen und mergen
-# Nach Merge: Tag erstellen
+# PR auf GitHub erstellen und mergen (via UI oder gh CLI)
+# Danach: main aktualisieren und Tag setzen
+
 git checkout main && git pull
+
 git tag -a v1.1.0 -m "Release 1.1.0 - hat einen Bug"
 git push origin v1.1.0
 ```
 
-### Rollback-Option: Git Revert (empfohlen) - Noch verbessern !!!
+### PHASE 2: ROLLBACK
 
 ```bash
-# Letzten Merge-Commit rückgängig machen
-# Commit-Id herausfinden
+# Schritt 1: Merge-Commit-ID herausfinden
 git log --oneline
-git reset 8578803 # Commit und alles danach rückgängig machen: git reset 8578803 --hard
-# Geht auch git revert 8578803, Unterschied: revert erzeugt 
-# neuen Commit für zurückgenommene Änderungen, reset nicht
-git commit -m "revert: rollback v1.1.0 due to bug"
+# Beispielausgabe:
+# a3f9e21 (HEAD -> main) Merge pull request #1 from feature/new-version
+# 8578803 feat: new version with bug
+
+# ─── WARUM revert statt reset? ───────────────────
+#
+# git reset <commit>
+#   → Bewegt den Branch-Zeiger zurück, löscht Commits aus der History
+#   → Nach einem Push: Andere haben diese Commits bereits!
+#   → Braucht "git push --force" → überschreibt fremde Arbeit
+#   → Auf shared Branches (main, develop) NICHT verwenden
+#
+# git revert <commit>
+#   → Erstellt einen NEUEN Commit, der die Änderungen umkehrt
+#   → History bleibt vollständig erhalten (Audit-Trail!)
+#   → Normaler Push reicht aus — kein Force nötig
+#   → Sicher für alle Teamkollegen
+
+# Schritt 2: Den Merge-Commit rückgängig machen
+# WICHTIG: Bei einem Merge-Commit MUSS -m 1 angegeben werden!
+#
+# -m 1 bedeutet: "Bleib beim ersten Eltern-Commit" = main vor dem Merge
+# -m 2 wäre: "Bleib beim Feature-Branch-Commit" (selten sinnvoll)
+#
+# Ohne -m 1 weiß git revert nicht, welchen von zwei Eltern
+# es als "Basis" nehmen soll. Deshalb geht "git revert HEAD" nicht,
+# weil HEAD nach einem GitHub-PR-Merge auf den Merge-Commit zeigt (ein Commit mit zwei Eltern).
+# → Fehlermeldung: "error: commit is a merge but no -m option was given"
+git revert -m 1 a3f9e21
+# git öffnet Editor für Commit-Message (oder --no-edit für Standard)
+# Standard-Message: "Revert "Merge pull request #1 from feature/new-version""
+# Du kannst sie anpassen: "revert: rollback v1.1.0 due to bug"
+
+# Schritt 3: Pushen (kein --force nötig!)
 git push origin main
 
-# Neuen Fix-Tag erstellen
+# Schritt 4: Neuen stabilen Tag setzen
 git tag -a v1.1.1 -m "Hotfix: rollback to stable state"
 git push origin v1.1.1
 
-# Eventuell Tags löschen, später (jetzt nicht)
-git tag -d v1.1.0 (lokal)
-git push origin --delete v1.1.0 (remote)
+# Schritt 5: Buggy Tag aufräumen (optional, aber sauber)
+git tag -d v1.1.0                    # lokal löschen
+git push origin --delete v1.1.0     # remote löschen
 ```
 
 ## Schritt 7 — Deployment-Umgebung mit Approval (optional)
@@ -287,7 +314,8 @@ Neuen Job am Ende der `ci.yml` hinzufügen:
 
 Jetzt pausiert die Pipeline beim `deploy-production`-Job und wartet auf
 deinen manuellen Klick im GitHub Actions-Interface. Wenn ich selbst Reviewer bin, läuft Job durch ohne Überprüfung. 
-Geht nur, wenn ich Tag pushe bei Trigger = Tag (vgl. in `ci.yml`: `startsWith(github.ref, 'refs/tags/v')`)
+Jobs `release` und `deploy-production` laufen nur, wenn Tag gepusht werden. 
+Also bei Trigger = Tag (vgl. in `ci.yml`: `startsWith(github.ref, 'refs/tags/v')`)
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
