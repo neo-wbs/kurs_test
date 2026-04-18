@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Code auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Node.js einrichten
         uses: actions/setup-node@v4
@@ -86,7 +86,7 @@ jobs:
 
     steps:
       - name: Code auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Node.js einrichten
         uses: actions/setup-node@v4
@@ -145,7 +145,7 @@ jobs:
 
     steps:
       - name: Code auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build-Artefakt herunterladen
         uses: actions/download-artifact@v4
