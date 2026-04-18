@@ -113,3 +113,57 @@ git add .github/dependabot.yml
 git commit -m "chore: add Dependabot configuration for automated updates"
 git push origin main
 ```
+
+### Dependabot aktivieren
+
+1. Gehe zu **Repo → Settings → Advanced Security → Dependabot**
+2. Aktiviere:
+   - **Dependabot alerts** ✅
+   - **Dependabot security updates** ✅
+   - **Dependabot version updates** ✅ (nach dem Push von dependabot.yml automatisch)
+
+Ab jetzt erstellt Dependabot automatisch PRs wenn Abhängigkeiten veraltet oder unsicher sind.
+
+---
+
+## Schritt 5 — npm audit in die Pipeline integrieren
+
+Ergänze den `lint-and-test`-Job in `ci.yml` um einen Sicherheits-Scan-Step:
+
+```yaml
+      - name: Sicherheits-Scan (npm audit)
+        run: npm audit --audit-level=high
+```
+
+### Lokal testen
+
+```bash
+# Aktuelle Schwachstellen prüfen
+npm audit
+
+# Bericht als JSON speichern
+npm audit --json > audit-report.json
+
+# Behebbare Probleme automatisch fixen
+npm audit fix
+```
+
+---
+
+## Schritt 6 — CodeQL Security Scanning einrichten
+
+Erstelle `.github/workflows/codeql.yml` (vgl. Code)
+
+```bash
+git add .github/workflows/codeql.yml
+git commit -m "feat: add CodeQL security scanning workflow"
+git push origin main
+```
+
+### Ergebnisse ansehen
+
+1. Gehe zu **Security → Code scanning** im Repository
+2. CodeQL-Findings werden dort aufgelistet
+3. Bei kritischen Findings: Automatische Alerts per E-Mail
+
+---
