@@ -1,169 +1,173 @@
-[![CI/CD Pipeline](https://github.com/neo-wbs/kurs_test/actions/workflows/ci.yml/badge.svg)](https://github.com/neo-wbs/kurs_test/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/neo-wbs/kurs_test/actions/workflows/codeql.yml/badge.svg)](https://github.com/neo-wbs/kurs_test/actions/workflows/codeql.yml)
+# CI/CD Praxis-Anleitung — Teil 8
 
-Ein CI/CD-Lernprojekt mit vollständiger automatisierter Pipeline.
-
-## Live-Demo
-🌐 https://neo-wbs.github.io/kurs_test/
-
-## Pipeline
-- ✅ Linting (ESLint + HTMLHint)
-- ✅ Unit-Tests mit Jest
-- ✅ Vite-Build mit Asset-Optimierung
-- ✅ Automatisches Deployment auf GitHub Pages
-- ✅ Sicherheits-Scans mit CodeQL und Dependabot
-
-# CI/CD Praxis-Anleitung — Teil 6
-
-> **Ziel:** Du ergänzt die Pipeline um Benachrichtigungen bei Fehlern,
-> einen Status-Badge im README, automatische Sicherheits-Scans mit CodeQL
-> und Dependabot, und lernst den richtigen Umgang mit Secrets.
+> **Ziel:** Du verwendest Secrets und ergänzt Permissions.
 >
-> **Voraussetzungen:** Teil 5 absolviert
+> **Voraussetzungen:** Teil 7 absolviert
 
 ---
 
-## Schritt 1 — Pipeline-Badge ins README einfügen (sh. oben)
+## Schritt 1 — Secrets sicher verwalten
 
-> Ersetze `USERNAME` durch deinen GitHub-Benutzernamen!
+### Repository-Secret anlegen (Beispiel: API-Key)
 
-```bash
-git add README.md
-git commit -m "docs: add pipeline badges to README"
-git push origin main
-```
+1. Gehe zu **Settings → Secrets and variables → Actions**
+2. Klicke **"New repository secret"**
+3. Name: `MY_API_KEY` (nur Großbuchstaben, Zahlen, Unterstriche)
+4. Value: Der geheime Wert
+5. **"Add secret"** klicken
 
-Nach dem Push zeigt das README live den Grün/Rot-Status der Pipeline.
-
----
-
-## Schritt 2 — E-Mail-Benachrichtigungen einrichten
-
-GitHub schickt bei fehlgeschlagenen Pipelines automatisch E-Mails — wenn richtig konfiguriert:
-
-1. Gehe zu **github.com → Dein Profilbild (oben rechts) → Settings**
-2. Klicke auf **Notifications** (linke Seitenleiste)
-3. Unter **"Actions"** sicherstellen:
-   - **"Send notifications for failed workflows only"** ist aktiviert
-   - **"Email"** ist als Kanal ausgewählt
-4. Speichern
-
-### Benachrichtigung im Workflow selbst (fortgeschritten)
-
-Füge diesen Step am Ende des `lint-and-test`-Jobs in `ci.yml` ein:
+### Secret im Workflow verwenden
 
 ```yaml
-      - name: Zusammenfassung bei Fehler
-        if: failure()
+      - name: API aufrufen (Beispiel)
+        env:
+          API_KEY: ${{ secrets.MY_API_KEY }}
         run: |
-          echo "## Pipeline fehlgeschlagen!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Ausgelöst von:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          # Secret ist als Umgebungsvariable verfügbar
+          # GitHub maskiert den Wert automatisch in Logs
+          echo "Key ist gesetzt: ${{ secrets.MY_API_KEY != '' }}"
 ```
 
-> `$GITHUB_STEP_SUMMARY` schreibt in die Job-Zusammenfassung im Actions-Tab —
-> sichtbar ohne in die Logs zu klicken.
+### Geheimen Wert aus .env NIEMALS committen
 
-Und einen Step für den Erfolgsfall:
+```bash
+# .env mit echten Werten anlegen (lokal, nie committen)
+echo "MY_API_KEY=test" > .env
+
+# Prüfen ob .env in .gitignore steht
+grep ".env" .gitignore
+# Ausgabe: .env  ← muss vorhanden sein!
+
+# Prüfen ob versehentlich Secrets gestaged wurden
+git diff --cached
+```
+
+### Secret Scanning testen (absichtlich + kontrolliert)
+
+GitHub Secret Scanning erkennt viele gängige Secret-Formate automatisch.
+Um Push Protection zu testen, kannst du einen Dummy-Key verwenden:
+
+```bash
+# ACHTUNG: Nur zu Testzwecken — echte Keys niemals einchecken!
+# GitHub erkennt z.B. GitHub Personal Access Tokens (ghp_...) sofort
+# und blockiert den Push BEVOR er auf GitHub landet
+```
+
+---
+
+## Schritt 2 — Workflow-Permissions absichern
+
+Ergänze die `ci.yml` um explizite Permissions:
 
 ```yaml
-      - name: Zusammenfassung bei Erfolg
-        if: success()
-        run: |
-          echo "## Pipeline erfolgreich!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Linting | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Coverage | ✅ |" >> $GITHUB_STEP_SUMMARY
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+# Globale Permissions: so wenig wie möglich
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    # Keine extra Permissions nötig — contents: read reicht
+    steps:
+      # ... wie bisher ...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    # Keine extra Permissions nötig
+    steps:
+      # ... wie bisher ...
+
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    # Nur dieser Job braucht Schreib-Rechte
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      # ... wie bisher ...
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write    # Für Release erstellen
+    steps:
+      # ... wie bisher ...
 ```
 
 ---
 
-## Schritt 3 — Strukturiertes Logging in app.js
+## Schritt 3 — SECURITY.md anlegen
 
-Füge eine Logger-Funktion in `app.js`, `app.cjs`, `app.test.js` ein (vgl. Code):
-
-```js
-// import, export nicht vergessen
-// app.test.js
-const { getRandomMessage, validateEmail, formatVersion, messages, log } = require('./app.cjs');
-
-// app.cjs
-module.exports = { getRandomMessage, validateEmail, formatVersion, messages, log };
-```
+Eine `SECURITY.md` teilt anderen mit, wie sie Sicherheitslücken melden sollen. Im Projektroot anlegen (vgl. Code)
 
 ```bash
-npm test
-# Alle Tests sollten weiterhin grün sein
-```
-
----
-
-## Schritt 4 — Dependabot konfigurieren
-
-Erstelle `.github/dependabot.yml` (Inhalt vgl. Code)
-
-```bash
-git add .github/dependabot.yml
-git commit -m "chore: add Dependabot configuration for automated updates"
+git add .
+git commit -m "docs: add security policy"
 git push origin main
 ```
 
-### Dependabot aktivieren
-
-1. Gehe zu **Repo → Settings → Advanced Security → Dependabot**
-2. Aktiviere:
-   - **Dependabot alerts** ✅
-   - **Dependabot security updates** ✅
-   - **Dependabot version updates** ✅ (nach dem Push von dependabot.yml automatisch)
-
-Ab jetzt erstellt Dependabot automatisch PRs wenn Abhängigkeiten veraltet oder unsicher sind.
-
 ---
 
-## Schritt 5 — npm audit in die Pipeline integrieren
+## Finale Zusammenfassung: Was die Pipeline jetzt alles macht
 
-Ergänze den `lint-and-test`-Job in `ci.yml` um einen Sicherheits-Scan-Step:
-
-```yaml
-      - name: Sicherheits-Scan (npm audit)
-        run: npm audit --audit-level=high
 ```
+Push / PR
+    │
+    ▼
+┌──────────────────────────────────────────────
+│  lint-and-test                               
+│  ✓ ESLint (JavaScript)                      
+│  ✓ HTMLHint (HTML)                          
+│  ✓ Jest Tests mit Coverage                  
+│  ✓ npm audit (Sicherheits-Scan)             
+│  ✓ Job-Zusammenfassung (Success/Failure)    
+└──────────────────────────────────────────────
+    │
+    ▼
+┌──────────────────────────────────────────────
+│  build                                       
+│  ✓ Vite Produktion-Build                    
+│  ✓ dist/ als Artefakt gespeichert           
+└──────────────────────────────────────────────
+    │
+    ├─────────────────────────────────┐
+    ▼                                 ▼
+┌────────────────────   ┌───────────────────────
+│  deploy (main/tag)    │  release (nur tags)   
+│  ✓ GitHub Pages       │  ✓ ZIP-Artefakt      
+└────────────────────   │  ✓ GitHub Release     
+                        └───────────────────────
 
-### Lokal testen
+Parallel (wöchentlich):
+┌─────────────────────────────────────────
+│  CodeQL Analyse                              
+│  ✓ JavaScript Security Scan                 
+│  ✓ Ergebnisse in Security-Tab               
+└────────────────────────────────────────
 
-```bash
-# Aktuelle Schwachstellen prüfen
-npm audit
-
-# Bericht als JSON speichern
-npm audit --json > audit-report.json
-
-# Behebbare Probleme automatisch fixen
-npm audit fix
+Automatisch (Dependabot):
+✓ PRs bei veralteten npm-Paketen
+✓ PRs bei unsicheren Abhängigkeiten
+✓ PRs für veraltete GitHub Actions
 ```
-
----
-
-## Schritt 6 — CodeQL Security Scanning einrichten
-
-Erstelle `.github/workflows/codeql.yml` (vgl. Code)
-
-```bash
-git add .github/workflows/codeql.yml
-git commit -m "feat: add CodeQL security scanning workflow"
-git push origin main
-```
-
-### Ergebnisse ansehen
-
-1. Gehe zu **Security → Code scanning** im Repository
-2. CodeQL-Findings werden dort aufgelistet
-3. Bei kritischen Findings: Automatische Alerts per E-Mail
 
 ---

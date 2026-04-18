@@ -20,20 +20,20 @@ jobs:
       security-events: write    # Nötig für CodeQL-Ergebnisse
 
     steps:
-      - name: 📥 Code auschecken
+      - name: Code auschecken
         uses: actions/checkout@v4
 
-      - name: 🔍 CodeQL initialisieren
+      - name: CodeQL initialisieren
         uses: github/codeql-action/init@v4
         with:
           languages: javascript
           # Zusätzliche Sicherheits-Queries aktivieren
           queries: security-extended
 
-      - name: 🔨 Auto-Build
+      - name: Auto-Build
         uses: github/codeql-action/autobuild@v4
 
-      - name: 📊 CodeQL Analyse durchführen
+      - name: CodeQL Analyse durchführen
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript"
