@@ -140,7 +140,7 @@ jobs:
         run: zip -r release-${{ github.ref_name }}.zip dist/
 
       - name: GitHub Release erstellen
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: release-${{ github.ref_name }}.zip
           generate_release_notes: true
