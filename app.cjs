@@ -55,7 +55,23 @@ if (typeof document !== 'undefined') {
     });
 }
 
-// CJS-Export – macht die Funktionen für require() in Tests verfügbar
-if (typeof module !== 'undefined') {
-    module.exports = { getRandomMessage, validateEmail, formatVersion, messages };
+// Strukturiertes Logging – kein import.meta hier, daher statische Version
+function log(level, message, data = {}) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    service: 'simple-web-app',
+    version: '1.0.0',  // kein import.meta.env in CJS/Node.js
+    ...data
+  };
+  if (level === 'error') {
+    console.error(JSON.stringify(entry));
+  } else {
+    console.log(JSON.stringify(entry));
+  }
+  return entry;
 }
+
+// CJS-Export – macht die Funktionen für require() in Tests verfügbar
+module.exports = { getRandomMessage, validateEmail, formatVersion, messages, log };

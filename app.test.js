@@ -1,4 +1,4 @@
-const { getRandomMessage, validateEmail, formatVersion, messages } = require('./app.cjs');
+const { getRandomMessage, validateEmail, formatVersion, messages, log } = require('./app.cjs');
 
 // ── Unit-Tests: getRandomMessage ──────────────────────────────────────────
 describe('getRandomMessage()', () => {
@@ -50,5 +50,38 @@ describe('formatVersion()', () => {
   test('wirft einen Fehler bei nicht-numerischen Werten', () => {
     expect(() => formatVersion('1', 0, 0)).toThrow('All version parts must be numbers');
     expect(() => formatVersion(1, '0', 0)).toThrow();
+  });
+});
+
+// ── Unit-Tests: log() ──────────────────────────────────────────────────────
+describe('log()', () => {
+  let consoleSpy;
+
+  beforeEach(() => {
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  test('gibt einen Log-Eintrag mit korrekten Feldern zurück', () => {
+    const entry = log('info', 'Test-Nachricht');
+    expect(entry).toHaveProperty('timestamp');
+    expect(entry).toHaveProperty('level', 'info');
+    expect(entry).toHaveProperty('message', 'Test-Nachricht');
+    expect(entry).toHaveProperty('service', 'simple-web-app');
+  });
+
+  test('nimmt zusätzliche Daten an', () => {
+    const entry = log('error', 'Fehler aufgetreten', { code: 500 });
+    expect(entry.code).toBe(500);
+  });
+
+  test('timestamp ist ein gültiges ISO-Datum', () => {
+    const entry = log('info', 'Test');
+    expect(() => new Date(entry.timestamp)).not.toThrow();
+    expect(new Date(entry.timestamp).toISOString()).toBe(entry.timestamp);
   });
 });
